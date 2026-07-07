@@ -13,7 +13,7 @@ name: 10-qx-core
 desc: "QX->Stash 核心：精简策略组/规则/DNS（保留机场84节点，不覆写Sniffer）"
 
 # ==========================================================================
-# 策略组：21 个（select×20 + url-test×1；fallback=0 load-balance=0）
+# 策略组：22 个（select×21 + url-test×1；fallback=0 load-balance=0）
 # 地区/专线节点用 Stash 官方确认的 include-all + filter 动态引用；
 # 主选择组只引用精简子组，所有 select 组 interval=-1 关闭周期测速。
 # ==========================================================================
@@ -82,6 +82,11 @@ proxy-groups: #!replace
     type: select
     interval: -1
     proxies: [🚀 节点选择, ⚡ 自动选择, 🛩 专线节点, 🇺🇸 美国节点, 🇯🇵 日本节点, 🇸🇬 新加坡节点, 🇭🇰 香港节点, DIRECT]
+  # Binance 独立组：DIRECT 首位保持默认直连，同时允许在 Stash 中手动切换代理
+  - name: 🟡 Binance
+    type: select
+    interval: -1
+    proxies: [DIRECT, 🚀 节点选择, ⚡ 自动选择, 🛩 专线节点, 🇭🇰 香港节点, 🇼🇸 台湾节点, 🇯🇵 日本节点, 🇸🇬 新加坡节点, 🇺🇸 美国节点]
   - name: 📲 Telegram
     type: select
     interval: -1
@@ -194,9 +199,9 @@ rules: #!replace
   # -- 游戏例外（DIRECT）--
   - DOMAIN-SUFFIX,supercell.com,DIRECT
   - DOMAIN-SUFFIX,clashroyale.com,DIRECT
-  # -- Binance 直连（必须在 加密货币 Provider 之前）--
-  - DOMAIN-SUFFIX,binance.com,DIRECT
-  - DOMAIN-KEYWORD,binance,DIRECT
+  # -- Binance 独立组（必须在 crypto_domain Provider 之前，避免被通用加密货币规则提前匹配）--
+  - DOMAIN-SUFFIX,binance.com,🟡 Binance
+  - DOMAIN-KEYWORD,binance,🟡 Binance
   # -- 广告拦截（尽量靠前）--
   - RULE-SET,anti_ad_domain,🛑 广告拦截
   # -- 加密与交易：CoinGlass / TradingView 明确规则 --
