@@ -1,0 +1,62 @@
+# ==========================================================================
+# 20-qx-youtube.stoverride
+# QX -> Stash 迁移 · YouTube 去广告（独立可选，关闭后不影响核心代理）
+#
+# 来源：qx.conf [rewrite_remote] -> ddgksf2013/Rewrite/AdBlock/YoutubeAds.conf
+#       响应脚本 -> Maasea/sgmodule youtube.response.js（Surge 风格 API）
+#
+# 仅贡献两条 YouTube UDP 规则、http.mitm / http.url-rewrite / http.script / script-providers；
+# 不含 proxies / proxy-groups / dns / rule-providers；不迁移 QX p12 / passphrase，
+# MITM 使用 Stash 自签 CA（由用户自行生成并信任）。
+#
+# Stash 官方已确认 response 脚本的 require-body / binary-mode / max-size / timeout，
+# 以及 Uint8Array body 与 $done({body}) 返回格式。Stash 在 binary-mode 下将
+# $response.body 作为 Uint8Array 提供；远程脚本内部使用 response.bodyBytes，
+# 其兼容适配路径尚未经过作者声明或 iPhone 真机验证，因此保持 UNVERIFIED。
+# ==========================================================================
+name: 20-qx-youtube
+desc: "YouTube 去广告（MITM+Rewrite+二进制响应脚本）· 独立开关 · 真机 UNVERIFIED"
+
+# 不使用 #!replace：在 10-qx-core 之后启用时，这两条规则插入核心 rules 前面。
+rules:
+  - AND,((DOMAIN-SUFFIX,googlevideo.com),(PROTOCOL,UDP)),REJECT
+  - AND,((DOMAIN,youtubei.googleapis.com),(PROTOCOL,UDP)),REJECT
+
+http:
+  # -- MITM 主机名（仅保留 Stash 官方文档确认的普通/通配形式）--
+  mitm:
+    - "*.googlevideo.com"
+    - "www.youtube.com"
+    - "s.youtube.com"
+    - "youtubei.googleapis.com"
+
+  # -- URL 重写：<正则> <替换|-> <类型> --
+  url-rewrite:
+    # 视频广告：移除 ctier=L 视频广告标记（302 重定向重组 URL）  [UNVERIFIED 正则]
+    # 原 QX: (^https?://[\w-]+\.googlevideo\.com/(?!dclk_video_ads).+?)&ctier=L(&.+?),ctier,(.+) url 302 $1$2$3
+    - (^https?:\/\/[\w-]+\.googlevideo\.com\/(?!dclk_video_ads).+?)&ctier=L(&.+?),ctier,(.+) $1$2$3 302
+    # 视频贴片广告(&oad)：直接拦截
+    - ^https?:\/\/[\w-]+\.googlevideo\.com\/(?!(dclk_video_ads|videoplayback\?)).+&oad - reject-200
+    # 通用广告统计接口：拦截
+    - ^https?:\/\/(www|s)\.youtube\.com\/api\/stats\/ads - reject-200
+    - ^https?:\/\/(www|s)\.youtube\.com\/(pagead|ptracking) - reject-200
+    - ^https?:\/\/s\.youtube\.com\/api\/stats\/qoe\?adcontext - reject-200
+
+  # -- 响应脚本：改写 youtubei/v1 响应体去除瀑布流/搜索/播放页/短视频广告 --
+  #    Stash 以 Uint8Array 提供 $response.body；远程脚本使用 response.bodyBytes，兼容性仍待真机确认。
+  #    max-size 限制为 10 MiB，避免无限制响应体占用 Network Extension 内存。
+  script:
+    - match: ^https?:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/(browse|next|player|search|reel\/reel_watch_sequence|guide|account\/get_setting|get_watch)(\?.*)?$
+      name: youtube_ads_response
+      type: response
+      require-body: true
+      binary-mode: true
+      max-size: 10485760
+      argument: '{"lyricLang":"off","captionLang":"off","blockUpload":true,"blockImmersive":true,"blockShorts":false,"debug":false}'
+      timeout: 30
+
+# -- 脚本资源（Stash 运行时自行拉取；此处不内联脚本内容）--
+script-providers:
+  youtube_ads_response:
+    url: "https://raw.githubusercontent.com/Maasea/sgmodule/refs/heads/master/Script/Youtube/youtube.response.js"
+    interval: 86400
